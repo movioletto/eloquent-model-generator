@@ -28,278 +28,301 @@ use Krlove\EloquentModelGenerator\Model\Relation;
  */
 class RelationProcessor implements ProcessorInterface
 {
-    /**
-     * @var DatabaseManager
-     */
-    protected $databaseManager;
+	/**
+	 * @var DatabaseManager
+	 */
+	protected $databaseManager;
 
-    /**
-     * @var EmgHelper
-     */
-    protected $helper;
+	/**
+	 * @var EmgHelper
+	 */
+	protected $helper;
 
-    /**
-     * FieldProcessor constructor.
-     * @param DatabaseManager $databaseManager
-     * @param EmgHelper $helper
-     */
-    public function __construct(DatabaseManager $databaseManager, EmgHelper $helper)
-    {
-        $this->databaseManager = $databaseManager;
-        $this->helper = $helper;
-    }
+	/**
+	 * FieldProcessor constructor.
+	 * @param DatabaseManager $databaseManager
+	 * @param EmgHelper $helper
+	 */
+	public function __construct(DatabaseManager $databaseManager, EmgHelper $helper)
+	{
+		$this->databaseManager = $databaseManager;
+		$this->helper = $helper;
+	}
 
-    /**
-     * @inheritdoc
-     */
-    public function process(EloquentModel $model, Config $config)
-    {
-        $schemaManager = $this->databaseManager->connection($config->get('connection'))->getDoctrineSchemaManager();
-        $prefix = $this->databaseManager->connection($config->get('connection'))->getTablePrefix();
+	/**
+	 * @inheritdoc
+	 */
+	public function process(EloquentModel $model, Config $config)
+	{
+		$schemaManager = $this->databaseManager->connection($config->get('connection'))->getDoctrineSchemaManager();
+		$prefix = $this->databaseManager->connection($config->get('connection'))->getTablePrefix();
 
-        $foreignKeys = $schemaManager->listTableForeignKeys($prefix . $model->getTableName());
-        foreach ($foreignKeys as $tableForeignKey) {
-            $tableForeignColumns = $tableForeignKey->getForeignColumns();
-            if (count($tableForeignColumns) !== 1) {
-                continue;
-            }
+		$foreignKeys = $schemaManager->listTableForeignKeys($prefix . $model->getTableName());
+		foreach ($foreignKeys as $tableForeignKey) {
+			$tableForeignColumns = $tableForeignKey->getForeignColumns();
+			if (count($tableForeignColumns) !== 1) {
+				continue;
+			}
 
-            $relation = new BelongsTo(
-                $this->removePrefix($prefix, $tableForeignKey->getForeignTableName()),
-                $tableForeignKey->getLocalColumns()[0],
-                $tableForeignColumns[0]
-            );
-            $this->addRelation($model, $relation);
-        }
+			$relation = new BelongsTo(
+				$this->removePrefix($prefix, $tableForeignKey->getForeignTableName()),
+				$tableForeignKey->getLocalColumns()[0],
+				$tableForeignColumns[0]
+			);
+			$this->addRelation($model, $relation, $config);
+		}
 
-        $tables = $schemaManager->listTables();
-        foreach ($tables as $table) {
-            if ($table->getName() === $prefix . $model->getTableName()) {
-                continue;
-            }
+		$tables = $schemaManager->listTables();
+		foreach ($tables as $table) {
+			if ($table->getName() === $prefix . $model->getTableName()) {
+				continue;
+			}
 
-            $foreignKeys = $table->getForeignKeys();
-            foreach ($foreignKeys as $name => $foreignKey) {
-                if ($foreignKey->getForeignTableName() === $prefix . $model->getTableName()) {
-                    $localColumns = $foreignKey->getLocalColumns();
-                    if (count($localColumns) !== 1) {
-                        continue;
-                    }
+			$foreignKeys = $table->getForeignKeys();
+			foreach ($foreignKeys as $name => $foreignKey) {
+				if ($foreignKey->getForeignTableName() === $prefix . $model->getTableName()) {
+					$localColumns = $foreignKey->getLocalColumns();
+					if (count($localColumns) !== 1) {
+						continue;
+					}
 
-                    if (count($foreignKeys) === 2 && count($table->getColumns()) === 2) {
-                        $keys = array_keys($foreignKeys);
-                        $key = array_search($name, $keys) === 0 ? 1 : 0;
-                        $secondForeignKey = $foreignKeys[$keys[$key]];
-                        $secondForeignTable = $this->removePrefix($prefix, $secondForeignKey->getForeignTableName());
+					if (count($foreignKeys) === 2 && count($table->getColumns()) === 2) {
+						$keys = array_keys($foreignKeys);
+						$key = array_search($name, $keys) === 0 ? 1 : 0;
+						$secondForeignKey = $foreignKeys[$keys[$key]];
+						$secondForeignTable = $this->removePrefix($prefix, $secondForeignKey->getForeignTableName());
 
-                        $relation = new BelongsToMany(
-                            $secondForeignTable,
-                            $this->removePrefix($prefix, $table->getName()),
-                            $localColumns[0],
-                            $secondForeignKey->getLocalColumns()[0]
-                        );
-                        $this->addRelation($model, $relation);
+						$relation = new BelongsToMany(
+							$secondForeignTable,
+							$this->removePrefix($prefix, $table->getName()),
+							$localColumns[0],
+							$secondForeignKey->getLocalColumns()[0]
+						);
+						$this->addRelation($model, $relation, $config);
 
-                        break;
-                    } else {
-                        $tableName = $this->removePrefix($prefix, $foreignKey->getLocalTableName());
-                        $foreignColumn = $localColumns[0];
-                        $localColumn = $foreignKey->getForeignColumns()[0];
+						break;
+					} else {
+						$tableName = $this->removePrefix($prefix, $foreignKey->getLocalTableName());
+						$foreignColumn = $localColumns[0];
+						$localColumn = $foreignKey->getForeignColumns()[0];
 
-                        if ($this->isColumnUnique($table, $foreignColumn)) {
-                            $relation = new HasOne($tableName, $foreignColumn, $localColumn);
-                        } else {
-                            $relation = new HasMany($tableName, $foreignColumn, $localColumn);
-                        }
+						if ($this->isColumnUnique($table, $foreignColumn)) {
+							$relation = new HasOne($tableName, $foreignColumn, $localColumn);
+						} else {
+							$relation = new HasMany($tableName, $foreignColumn, $localColumn);
+						}
 
-                        $this->addRelation($model, $relation);
-                    }
-                }
-            }
-        }
-    }
+						$this->addRelation($model, $relation, $config);
+					}
+				}
+			}
+		}
+	}
 
-    /**
-     * @inheritdoc
-     */
-    public function getPriority()
-    {
-        return 5;
-    }
+	/**
+	 * @inheritdoc
+	 */
+	public function getPriority()
+	{
+		return 5;
+	}
 
-    /**
-     * @param Table $table
-     * @param string $column
-     * @return bool
-     */
-    protected function isColumnUnique(Table $table, $column)
-    {
-        foreach ($table->getIndexes() as $index) {
-            $indexColumns = $index->getColumns();
-            if (count($indexColumns) !== 1) {
-                continue;
-            }
-            $indexColumn = $indexColumns[0];
-            if ($indexColumn === $column && $index->isUnique()) {
-                return true;
-            }
-        }
+	/**
+	 * @param Table $table
+	 * @param string $column
+	 * @return bool
+	 */
+	protected function isColumnUnique(Table $table, $column)
+	{
+		foreach ($table->getIndexes() as $index) {
+			$indexColumns = $index->getColumns();
+			if (count($indexColumns) !== 1) {
+				continue;
+			}
+			$indexColumn = $indexColumns[0];
+			if ($indexColumn === $column && $index->isUnique()) {
+				return true;
+			}
+		}
 
-        return false;
-    }
+		return false;
+	}
 
-    /**
-     * @param EloquentModel $model
-     * @param Relation $relation
-     * @throws GeneratorException
-     */
-    protected function addRelation(EloquentModel $model, Relation $relation)
-    {
-        $relationClass = Str::singular(Str::studly($relation->getTableName()));
-        if ($relation instanceof HasOne) {
-            $name = Str::singular(Str::camel($relation->getTableName()));
-            $docBlock = sprintf('@return \%s', EloquentHasOne::class);
+	/**
+	 * @param EloquentModel $model
+	 * @param Relation $relation
+	 * @param Config $config
+	 * @throws GeneratorException
+	 */
+	protected function addRelation(EloquentModel $model, Relation $relation, Config $config)
+	{
+		$relationClass = Str::studly($relation->getTableName());
+		if($config->get('singular', true)) {
+			$relationClass = Str::singular($relationClass);
+		}
 
-            $virtualPropertyType = $relationClass;
-        } elseif ($relation instanceof HasMany) {
-            $name = Str::plural(Str::camel($relation->getTableName()));
-            $docBlock = sprintf('@return \%s', EloquentHasMany::class);
+		if ($relation instanceof HasOne) {
+			$name = Str::camel($relation->getTableName());
+			if($config->get('singular', true)) {
+				$name = Str::singular($name);
+			}
+			$docBlock = sprintf('@return \%s', EloquentHasOne::class);
 
-            $virtualPropertyType = sprintf('%s[]', $relationClass);
-        } elseif ($relation instanceof BelongsTo) {
-            $name = Str::singular(Str::camel($relation->getTableName()));
-            $docBlock = sprintf('@return \%s', EloquentBelongsTo::class);
+			$virtualPropertyType = $relationClass;
+		} elseif ($relation instanceof HasMany) {
+			$name = Str::camel($relation->getTableName());
+			if($config->get('plural', true)) {
+				$name = Str::plural($name);
+			}
+			$docBlock = sprintf('@return \%s', EloquentHasMany::class);
 
-            $virtualPropertyType = $relationClass;
-        } elseif ($relation instanceof BelongsToMany) {
-            $name = Str::plural(Str::camel($relation->getTableName()));
-            $docBlock = sprintf('@return \%s', EloquentBelongsToMany::class);
+			$virtualPropertyType = sprintf('%s[]', $relationClass);
+		} elseif ($relation instanceof BelongsTo) {
+			$name = Str::camel($relation->getTableName());
+			if($config->get('singular', true)) {
+				$name = Str::singular($name);
+			}
+			$docBlock = sprintf('@return \%s', EloquentBelongsTo::class);
 
-            $virtualPropertyType = sprintf('%s[]', $relationClass);
-        } else {
-            throw new GeneratorException('Relation not supported');
-        }
+			$virtualPropertyType = $relationClass;
+		} elseif ($relation instanceof BelongsToMany) {
+			$name = Str::camel($relation->getTableName());
+			if($config->get('plural', true)) {
+				$name = Str::plural($name);
+			}
+			$docBlock = sprintf('@return \%s', EloquentBelongsToMany::class);
 
-        $method = new MethodModel($name);
-        $method->setBody($this->createMethodBody($model, $relation));
-        $method->setDocBlock(new DocBlockModel($docBlock));
+			$virtualPropertyType = sprintf('%s[]', $relationClass);
+		} else {
+			throw new GeneratorException('Relation not supported');
+		}
 
-        $model->addMethod($method);
-        $model->addProperty(new VirtualPropertyModel($name, $virtualPropertyType));
-    }
+		$method = new MethodModel($name);
+		$method->setBody($this->createMethodBody($model, $relation, $config));
+		$method->setDocBlock(new DocBlockModel($docBlock));
 
-    /**
-     * @param EloquentModel $model
-     * @param Relation $relation
-     * @return string
-     */
-    protected function createMethodBody(EloquentModel $model, Relation $relation)
-    {
-        $reflectionObject = new \ReflectionObject($relation);
-        $name = Str::camel($reflectionObject->getShortName());
+		$model->addMethod($method);
+		$model->addProperty(new VirtualPropertyModel($name, $virtualPropertyType));
+	}
 
-        $arguments = [
-            $model->getNamespace()->getNamespace() . '\\' . Str::singular(Str::studly($relation->getTableName()))
-        ];
+	/**
+	 * @param EloquentModel $model
+	 * @param Relation $relation
+	 * @param Config $config
+	 * @return string
+	 */
+	protected function createMethodBody(EloquentModel $model, Relation $relation, Config $config)
+	{
+		$reflectionObject = new \ReflectionObject($relation);
+		$name = Str::camel($reflectionObject->getShortName());
 
-        if ($relation instanceof BelongsToMany) {
-            $defaultJoinTableName = $this->helper->getDefaultJoinTableName(
-                $model->getTableName(),
-                $relation->getTableName()
-            );
-            $joinTableName = $relation->getJoinTable() === $defaultJoinTableName
-                ? null
-                : $relation->getJoinTable();
-            $arguments[] = $joinTableName;
+		$nameTable = Str::studly($relation->getTableName());
+		if($config->get('singular', true)) {
+			$nameTable = Str::singular($nameTable);
+		}
+		$arguments = [
+			$model->getNamespace()->getNamespace() . '\\' . $nameTable
+		];
 
-            $arguments[] = $this->resolveArgument(
-                $relation->getForeignColumnName(),
-                $this->helper->getDefaultForeignColumnName($model->getTableName())
-            );
-            $arguments[] = $this->resolveArgument(
-                $relation->getLocalColumnName(),
-                $this->helper->getDefaultForeignColumnName($relation->getTableName())
-            );
-        } elseif ($relation instanceof HasMany) {
-            $arguments[] = $this->resolveArgument(
-                $relation->getForeignColumnName(),
-                $this->helper->getDefaultForeignColumnName($model->getTableName())
-            );
-            $arguments[] = $this->resolveArgument(
-                $relation->getLocalColumnName(),
-                EmgHelper::DEFAULT_PRIMARY_KEY
-            );
-        } else {
-            $arguments[] = $this->resolveArgument(
-                $relation->getForeignColumnName(),
-                $this->helper->getDefaultForeignColumnName($relation->getTableName())
-            );
-            $arguments[] = $this->resolveArgument(
-                $relation->getLocalColumnName(),
-                EmgHelper::DEFAULT_PRIMARY_KEY
-            );
-        }
+		if ($relation instanceof BelongsToMany) {
+			$defaultJoinTableName = $this->helper->getDefaultJoinTableName(
+				$model->getTableName(),
+				$relation->getTableName(),
+				$config->get('singular', true)
+			);
+			$joinTableName = $relation->getJoinTable() === $defaultJoinTableName
+				? null
+				: $relation->getJoinTable();
+			$arguments[] = $joinTableName;
 
-        return sprintf('return $this->%s(%s);', $name, $this->prepareArguments($arguments));
-    }
+			$arguments[] = $this->resolveArgument(
+				$relation->getForeignColumnName(),
+				$this->helper->getDefaultForeignColumnName($model->getTableName(), $config->get('singular', true))
+			);
+			$arguments[] = $this->resolveArgument(
+				$relation->getLocalColumnName(),
+				$this->helper->getDefaultForeignColumnName($relation->getTableName(), $config->get('singular', true))
+			);
+		} elseif ($relation instanceof HasMany) {
+			$arguments[] = $this->resolveArgument(
+				$relation->getForeignColumnName(),
+				$this->helper->getDefaultForeignColumnName($model->getTableName(), $config->get('singular', true))
+			);
+			$arguments[] = $this->resolveArgument(
+				$relation->getLocalColumnName(),
+				EmgHelper::DEFAULT_PRIMARY_KEY
+			);
+		} else {
+			$arguments[] = $this->resolveArgument(
+				$relation->getForeignColumnName(),
+				$this->helper->getDefaultForeignColumnName($relation->getTableName(), $config->get('singular', true))
+			);
+			$arguments[] = $this->resolveArgument(
+				$relation->getLocalColumnName(),
+				EmgHelper::DEFAULT_PRIMARY_KEY
+			);
+		}
 
-    /**
-     * @param array $array
-     * @return array
-     */
-    protected function prepareArguments(array $array)
-    {
-        $array = array_reverse($array);
-        $milestone = false;
-        foreach ($array as $key => &$item) {
-            if (!$milestone) {
-                if (!is_string($item)) {
-                    unset($array[$key]);
-                } else {
-                    $milestone = true;
-                }
-            } else {
-                if ($item === null) {
-                    $item = 'null';
+		return sprintf('return $this->%s(%s);', $name, $this->prepareArguments($arguments));
+	}
 
-                    continue;
-                }
-            }
-            $item = sprintf("'%s'", $item);
-        }
+	/**
+	 * @param array $array
+	 * @return array
+	 */
+	protected function prepareArguments(array $array)
+	{
+		$array = array_reverse($array);
+		$milestone = false;
+		foreach ($array as $key => &$item) {
+			if (!$milestone) {
+				if (!is_string($item)) {
+					unset($array[$key]);
+				} else {
+					$milestone = true;
+				}
+			} else {
+				if ($item === null) {
+					$item = 'null';
 
-        return implode(', ', array_reverse($array));
-    }
+					continue;
+				}
+			}
+			$item = sprintf("'%s'", $item);
+		}
 
-    /**
-     * @param string $actual
-     * @param string $default
-     * @return string|null
-     */
-    protected function resolveArgument($actual, $default)
-    {
-        return $actual === $default ? null : $actual;
-    }
+		return implode(', ', array_reverse($array));
+	}
 
-    /**
-     * todo: move to helper
-     * @param string $prefix
-     * @param string $tableName
-     * @return string
-     */
-    protected function addPrefix($prefix, $tableName)
-    {
-        return $prefix . $tableName;
-    }
+	/**
+	 * @param string $actual
+	 * @param string $default
+	 * @return string|null
+	 */
+	protected function resolveArgument($actual, $default)
+	{
+		return $actual === $default ? null : $actual;
+	}
 
-    /**
-     * todo: move to helper
-     * @param string $prefix
-     * @param string $tableName
-     * @return string
-     */
-    protected function removePrefix($prefix, $tableName)
-    {
-        return preg_replace("/^$prefix/", '', $tableName);
-    }
+	/**
+	 * todo: move to helper
+	 * @param string $prefix
+	 * @param string $tableName
+	 * @return string
+	 */
+	protected function addPrefix($prefix, $tableName)
+	{
+		return $prefix . $tableName;
+	}
+
+	/**
+	 * todo: move to helper
+	 * @param string $prefix
+	 * @param string $tableName
+	 * @return string
+	 */
+	protected function removePrefix($prefix, $tableName)
+	{
+		return preg_replace("/^$prefix/", '', $tableName);
+	}
 }

@@ -8,4 +8,6 @@ return [
     'date_format'     => null,
     'connection'      => null,
     'backup'          => null,
+	'singular'        => true,
+	'plural'          => true,
 ];
