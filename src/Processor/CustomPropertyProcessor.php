@@ -34,13 +34,22 @@ class CustomPropertyProcessor implements ProcessorInterface
             $model->addProperty($pDateFormat);
         }
 
-        if ($config->has('connection')) {
-            $pConnection = new PropertyModel('connection', 'protected', $config->get('connection'));
-            $pConnection->setDocBlock(
-                new DocBlockModel('The connection name for the model.', '', '@var string')
-            );
-            $model->addProperty($pConnection);
-        }
+	    if ($config->has('connection')) {
+		    $pConnection = new PropertyModel('connection', 'protected', $config->get('connection'));
+		    $pConnection->setDocBlock(
+			    new DocBlockModel('The connection name for the model.', '', '@var string')
+		    );
+		    $model->addProperty($pConnection);
+	    }
+
+	    if ($config->has('incrementing')) {
+		    $pIncrementing = new PropertyModel('incrementing', 'public', $config->get('incrementing'));
+		    $pIncrementing->setDocBlock(
+			    new DocBlockModel('Indicates if the IDs are auto-incrementing.', '', '@var bool')
+		    );
+		    $model->addProperty($pIncrementing);
+	    }
+
     }
 
     /**

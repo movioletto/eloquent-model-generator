@@ -10,4 +10,6 @@ return [
     'backup'          => null,
 	'singular'        => true,
 	'plural'          => true,
+	'table_name'      => null,
+	'incrementing'    => null,
 ];

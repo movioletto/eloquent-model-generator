@@ -59,7 +59,7 @@ class GenerateDBCommand extends Command
 
 
 		foreach ($tabelleDB as $t) {
-			$nameModel = camel_case($t);
+			$nameModel = ucfirst(camel_case($t));
 			$nameTable = $t;
 
 			$config = $this->createConfig($nameModel, $nameTable);
